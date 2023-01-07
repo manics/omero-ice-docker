@@ -1,4 +1,10 @@
 ---
+# The ARM64 build takes too long using qemu/buildx on a standard GitHub runner, so
+# we need a self-hosted ARM64 runner, which shouldn't be used on a public repo:
+# https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners#self-hosted-runner-security
+# The public repo just runs a CI build for amd64 only
+# The build and push is done in a private repo manics/omero-ice-docker-private
+
 name: Build
 
 on:
@@ -11,28 +17,46 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository_owner }}/omero-ice-docker
   # Set to "" to publish container on tags only
   # Set to "<branch-name>" to also publish on every push to <branch-name>
   PUBLISH_BRANCH: "main"
 
 jobs:
-  upload:
-    runs-on: ubuntu-latest
+
+  ubuntu-2204-amd64:
+    runs-on: ubuntu-22.04
     steps:
 
-      - name: Get other tags
-        id: gettags
-        uses: jupyterhub/action-major-minor-tag-calculator@v2
+      - name: Login to container registry
+        uses: docker/login-action@v2
+        if: >
+          github.repository == 'manics/omero-ice-docker-private' &&
+          github.event_name == 'push' &&
+          (github.ref == format('refs/heads/{0}', env.PUBLISH_BRANCH) ||
+          startsWith(github.ref, 'refs/tags/'))
         with:
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-          prefix: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:"
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+      - name: Push to container registry
+        uses: docker/build-push-action@v3
+        with:
+          platforms: linux/amd64
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-ubuntu2204-amd64
+          push: >
+            ${{
+              github.repository == 'manics/omero-ice-docker-private' &&
+              github.event_name == 'push' &&
+              github.ref == format('refs/heads/{0}', env.PUBLISH_BRANCH) ||
+              startsWith(github.ref, 'refs/tags/')
+            }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+  ubuntu-2204-arm64:
+    runs-on: [self-hosted, linux, ARM64]
+    if: github.repository == 'manics/omero-ice-docker-private'
+    steps:
 
       - name: Login to container registry
         uses: docker/login-action@v2
@@ -48,11 +72,44 @@ jobs:
       - name: Push to container registry
         uses: docker/build-push-action@v3
         with:
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ join(fromJson(steps.gettags.outputs.tags)) }}
+          platforms: linux/arm64
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-ubuntu2204-arm64
           push: >
             ${{
               github.event_name == 'push' &&
               github.ref == format('refs/heads/{0}', env.PUBLISH_BRANCH) ||
               startsWith(github.ref, 'refs/tags/')
             }}
+
+  ubuntu-2204-multiarch:
+    needs:
+      - ubuntu-2204-amd64
+      - ubuntu-2204-arm64
+
+    runs-on: ubuntu-22.04
+    if: github.repository == 'manics/omero-ice-docker-private'
+    steps:
+
+      - name: Create multi-arch manifest
+        run: |
+          BASENAME=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-ubuntu2204
+          docker manifest create ${BASENAME} --amend ${BASENAME}-amd64 --amend ${BASENAME}-arm64
+
+      - name: Login to container registry
+        uses: docker/login-action@v2
+        if: >
+          github.event_name == 'push' &&
+          (github.ref == format('refs/heads/{0}', env.PUBLISH_BRANCH) ||
+          startsWith(github.ref, 'refs/tags/'))
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push manifest to container registry
+        if: >
+          github.event_name == 'push' &&
+          (github.ref == format('refs/heads/{0}', env.PUBLISH_BRANCH) ||
+          startsWith(github.ref, 'refs/tags/'))
+        run: |
+          docker manifest push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-ubuntu2204

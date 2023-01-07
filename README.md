@@ -3,12 +3,12 @@ OMERO Ice Docker
 
 [![Actions Status](https://github.com/manics/omero-ice-docker/workflows/Build/badge.svg)](https://github.com/manics/omero-ice-docker/actions)
 
-A Ubuntu 22.04 Zeroc Ice 3.6 image.
+A Ubuntu 22.04 Zeroc Ice 3.6 multi-architecture image (AMD64 and ARM64).
 
 Use this as a source for Zeroc Ice 3.6 when building OMERO.server or OMERO.web:
 
 ```Dockerfile
-FROM ghcr.io/manics/omero-ice-docker:main AS ice-builder
+FROM ghcr.io/manics/omero-ice-docker:main-ubuntu2204 AS ice-builder
 
 FROM docker.io/library/ubuntu:22.04
 
