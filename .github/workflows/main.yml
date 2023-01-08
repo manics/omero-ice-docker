@@ -21,7 +21,7 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/omero-ice-docker
   # Set to "" to publish container on tags only
   # Set to "<branch-name>" to also publish on every push to <branch-name>
-  PUBLISH_BRANCH: "main"
+  PUBLISH_BRANCH: ""
 
 jobs:
 
