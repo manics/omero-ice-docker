@@ -1,0 +1,25 @@
+FROM ghcr.io/manics/omero-ice-docker:main-ubuntu2204 AS ice-builder
+
+FROM docker.io/library/ubuntu:22.04
+
+RUN apt-get update -y -q && \
+    apt-get install -y -q \
+    libdb5.3++ \
+    mcpp \
+    python3-pip
+
+COPY --from=ice-builder /opt/Ice-3.6.5/ /opt/Ice-3.6.5/
+COPY --from=ice-builder /opt/setup/zeroc-ice-3.6.5/dist/ /opt/Ice-3.6.5/python/
+
+RUN ln -s /opt/Ice-3.6.5/bin/* /usr/local/bin/ && \
+    for d in /opt/Ice-3.6.5/lib64 /opt/Ice-3.6.5/lib/aarch64-linux-gnu; do \
+      if [ -d "$d" ]; then echo "$d" >> /etc/ld.so.conf.d/ice-3.6.5.conf; fi \
+    done && \
+    ldconfig
+
+RUN pip install /opt/Ice-3.6.5/python/zeroc_ice-3.6.5-cp310-cp310-linux_*.whl
+
+RUN for f in /usr/local/bin/*; \
+      do echo $f; $f --version; \
+    done
+RUN python3 -c "import Ice; print(Ice.stringVersion())"

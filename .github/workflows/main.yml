@@ -2,8 +2,9 @@
 # The ARM64 build takes too long using qemu/buildx on a standard GitHub runner, so
 # we need a self-hosted ARM64 runner, which shouldn't be used on a public repo:
 # https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners#self-hosted-runner-security
-# The public repo just runs a CI build for amd64 only
-# The build and push is done in a private repo manics/omero-ice-docker-private
+#
+# manics/omero-ice-docker builds and publishes the amd64 image.
+# manics/omero-ice-docker-private builds and publishes the arm64 image and the multi-arch manifest.
 
 name: Build
 
@@ -26,12 +27,12 @@ jobs:
 
   ubuntu-2204-amd64:
     runs-on: ubuntu-22.04
+    if: github.repository != 'manics/omero-ice-docker-private'
     steps:
 
       - name: Login to container registry
         uses: docker/login-action@v2
         if: >
-          github.repository == 'manics/omero-ice-docker-private' &&
           github.event_name == 'push' &&
           (github.ref == format('refs/heads/{0}', env.PUBLISH_BRANCH) ||
           startsWith(github.ref, 'refs/tags/'))
@@ -40,14 +41,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push to container registry
+      - name: Build and push to container registry
         uses: docker/build-push-action@v3
         with:
           platforms: linux/amd64
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-ubuntu2204-amd64
           push: >
             ${{
-              github.repository == 'manics/omero-ice-docker-private' &&
               github.event_name == 'push' &&
               github.ref == format('refs/heads/{0}', env.PUBLISH_BRANCH) ||
               startsWith(github.ref, 'refs/tags/')
@@ -69,7 +69,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push to container registry
+      - name: Build and push to container registry
         uses: docker/build-push-action@v3
         with:
           platforms: linux/arm64
